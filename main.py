@@ -154,7 +154,7 @@ class Server:
             return 200, http_response, length
 
         proxy_connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        proxy_connection_socket.settimeout(10)
+        proxy_connection_socket.settimeout(2)
 
         if self.is_an_image_request(parsed_http_request) and self.is_sub_image:
             parsed_http_request.full_resource_path = self.sub_image_full_resource_url
