@@ -98,23 +98,19 @@ class Server:
             if code == 200:
                 client_connection_socket.sendall(message)
                 self.handle_telemetry(http_contents, size)
-            elif code == 404:
-                self.logger.warning(
-                    f"Sending 404 to {ip_address}@{port} for {http_contents.full_resource_path.decode('utf-8')}"
-                )
-                client_connection_socket.sendall(http_version + b' 404 File Not Found\r\n\r\n')
-            elif code == 408:
-                self.logger.warning(
-                    f"Sending 408 to {ip_address}@{port} for {http_contents.full_resource_path.decode('utf-8')}"
-                )
-                client_connection_socket.sendall(http_version + b' 408 Request Timeout\r\n\r\n')
+                client_connection_socket.close()
+                return
+            if code == 301:
+                client_connection_socket.sendall(message)
+                client_connection_socket.close()
+                return
             else:
                 self.logger.warning(
-                    f"Sending 500 to {ip_address}@{port} for {http_contents.full_resource_path.decode('utf-8')}"
+                    f"Sending {code} to {ip_address}@{port} for {http_contents.full_resource_path.decode('utf-8')}"
                 )
-                client_connection_socket.sendall(http_version + b' 500 Internal Server Error\r\n\r\n')
-
-            client_connection_socket.close()
+                http_response = http_version + b' ' + str(code).encode('utf-8') + b' ' + message + b'\r\n\r\n'
+                client_connection_socket.sendall(http_response)
+                client_connection_socket.close()
 
         except ValueError as e:
             self.logger.warning(f"Sending 400 to {ip_address}@{port} for message: {client_request} because of {e}")
@@ -181,8 +177,8 @@ class Server:
         # Find content length
         headers = http_header.split(b'\r\n')
         _, status, message = headers[0].split(b' ', 2)
-        if int(status) != 200 or message != b'OK':
-            return int(status), b'', 0
+        if int(status) not in [200, 301]:
+            return int(status), message, 0
 
         for item in headers:
             if item.startswith(b'Content-Length'):
@@ -201,7 +197,7 @@ class Server:
                         f"Timeout with no content-length, receive {len(web_server_full_response)}B "
                         f"({len(data)}B w/o headers) of data from {parsed_http_request.host}@{parsed_http_request.port}"
                     )
-                    return 200, web_server_full_response, len(data)
+                    return int(status), web_server_full_response, len(data)
 
                 if not server_response:
                     break
@@ -214,7 +210,7 @@ class Server:
                 f"Successfully receive {len(web_server_full_response)}B ({len(data)}B w/o headers) "
                 f"of data from {parsed_http_request.host}@{parsed_http_request.port}"
             )
-            return 200, web_server_full_response, len(data)
+            return int(status), web_server_full_response, len(data)
         else:
             while len(web_server_full_response) < content_length:
                 try:
@@ -231,7 +227,7 @@ class Server:
                 f"Successfully receive {len(web_server_full_response)}B ({content_length}B w/o headers) "
                 f"of data from {parsed_http_request.host}@{parsed_http_request.port}"
             )
-            return 200, web_server_full_response, content_length
+            return int(status), web_server_full_response, content_length
 
     def parse_http(self, message: str):
         valid_http_messages = (b"GET", b"POST", b"PUT", b"DELETE", b"CONNECT", b"OPTIONS", b"PATCH", b"TRACE", b"HEAD")
@@ -305,7 +301,7 @@ if __name__ == '__main__':
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
     # To disable logging, uncomment the following line
-    logger.disabled = True
+    # logger.disabled = True
 
     # Create parser
     parser = argparse.ArgumentParser(description="Python proxy server for CS3103 assignments")
