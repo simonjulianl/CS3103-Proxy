@@ -124,7 +124,7 @@ class Server:
         if b'image' in accept_headers or b'*/*' in accept_headers:
             is_accepting_image = True
 
-        image_extensions = [b'.jpg', b'.png', b'.ico', b'.jpeg', b'.gif', b'.tiff']  # common image extensions
+        image_extensions = [b'.jpg', b'.png', b'.ico', b'.jpeg', b'.gif', b'.tiff', b'.svg', b'.apng', b'.avif']  # common image extensions
         for ext in image_extensions:
             if ext in parsed_http_request.full_resource_path.lower() and is_accepting_image:
                 return True
@@ -156,7 +156,9 @@ class Server:
         proxy_connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         proxy_connection_socket.settimeout(2)
 
+        is_sub_image_used = False
         if self.is_an_image_request(parsed_http_request) and self.is_sub_image:
+            is_sub_image_used = True
             parsed_http_request.full_resource_path = self.sub_image_full_resource_url
             parsed_http_request.port = self.sub_image_url_port
             parsed_http_request.host = self.sub_image_url_host
@@ -169,13 +171,37 @@ class Server:
         while b'\r\n\r\n' not in header:
             server_response = proxy_connection_socket.recv(4096)
             header += server_response
-
-        http_header, data = header.split(b'\r\n\r\n', 1)
+        http_header, _ = header.split(b'\r\n\r\n', 1)
         web_server_full_response = header
 
         content_length = -1
         # Find content length
         headers = http_header.split(b'\r\n')
+        if self.is_sub_image and not is_sub_image_used:
+            # check if the content type is an image
+            for item in headers:
+                if item.startswith(b'Content-Type'):
+                    _, data = item.split(b':', 1)
+                    if b'image' in data:
+                        # the return is an image but the image is not subbed
+                        parsed_http_request.full_resource_path = self.sub_image_full_resource_url
+                        parsed_http_request.port = self.sub_image_url_port
+                        parsed_http_request.host = self.sub_image_url_host
+                        client_request = self.build_sub_image_request(parsed_http_request)
+
+                        proxy_connection_socket.close()
+                        proxy_connection_socket.connect((parsed_http_request.host, parsed_http_request.port))
+                        proxy_connection_socket.sendall(client_request)
+
+                        header = b''
+                        while b'\r\n\r\n' not in header:
+                            server_response = proxy_connection_socket.recv(4096)
+                            header += server_response
+                        http_header, data = header.split(b'\r\n\r\n', 1)
+                        headers = http_header.split(b'\r\n')
+                        web_server_full_response = header
+                        break
+
         _, status, message = headers[0].split(b' ', 2)
         if int(status) not in [200, 301]:
             return int(status), message, 0
