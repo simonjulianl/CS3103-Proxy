@@ -190,6 +190,9 @@ class Server:
                         client_request = self.build_sub_image_request(parsed_http_request)
 
                         proxy_connection_socket.close()
+
+                        proxy_connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        proxy_connection_socket.settimeout(2)
                         proxy_connection_socket.connect((parsed_http_request.host, parsed_http_request.port))
                         proxy_connection_socket.sendall(client_request)
 
