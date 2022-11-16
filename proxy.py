@@ -197,7 +197,7 @@ class Server:
         return http_response, len(html)
 
     def relay_request_to_server(self, parsed_http_request, client_request):
-        timeout = 3
+        timeout = 1
         if self.is_attack_webpage:
             http_response, length = self.attack_html_request(parsed_http_request)
             return 200, http_response, length
