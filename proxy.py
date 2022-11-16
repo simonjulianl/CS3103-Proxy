@@ -342,13 +342,13 @@ class Server:
         except Exception as e:
             raise ValueError(f"Invalid Parsing: {e}")
 
-    def check_telemetry(self, key, url):
+    def check_telemetry(self, key):
         timeout = 5  # purely based on heuristics
         while time.time() < self.telemetry[key][0] + timeout:
             remainder_time = self.telemetry[key][0] + timeout - time.time()
             time.sleep(remainder_time)
 
-        telemetry_result = f"{url.decode('utf-8')}, {self.telemetry[key][1]}"
+        telemetry_result = f"{key[0].decode('utf-8')}, {self.telemetry[key][1]}"
         self.logger.info(f"Printing telemetry result: {telemetry_result}")
         print(telemetry_result)
 
@@ -356,14 +356,22 @@ class Server:
             del self.telemetry[key]
 
     def handle_telemetry(self, http_parsed_content, message_size):
-        key = (http_parsed_content.host, http_parsed_content.port)
-        url = http_parsed_content.full_resource_path.replace(b'//', b'||').split(b'/')[0].replace(b'||', b'//')
+        # get referer
+        referer = None
+        user_agent = http_parsed_content.host
+        for item, value in http_parsed_content.headers.items():
+            if item.startswith(b'Referer'):
+                referer = value
+            elif item.startswith(b'User-Agent'):
+                user_agent = value
+
+        key = (referer, user_agent) if referer is not None else (http_parsed_content.full_resource_path, user_agent)
 
         with self._lock:
             if self.telemetry.get(key) is None:
                 self.telemetry[key] = (time.time(), message_size)
 
-                t = threading.Thread(target=self.check_telemetry, args=(key, url,))
+                t = threading.Thread(target=self.check_telemetry, args=(key,))
                 t.start()
             else:
                 self.telemetry[key] = (time.time(), self.telemetry[key][1] + message_size)
@@ -379,7 +387,7 @@ if __name__ == '__main__':
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
     # To disable logging, uncomment the following line
-    logger.disabled = True
+    # logger.disabled = True
 
     # Create parser
     parser = argparse.ArgumentParser(description="Python proxy server for CS3103 assignments")
