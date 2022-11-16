@@ -78,15 +78,14 @@ class Server:
             self.main_socket.close()
 
     def proxy_handler(self, client_connection_socket, ip_address, port):
-        buffer_size = 2048
-        client_request = client_connection_socket.recv(buffer_size)
-        http_version = b'HTTP/1.1' if b'HTTP/1.1' in client_request else b'HTTP/1.0'
+        client_request, http_version = self.read_client_request(client_connection_socket)
 
         try:
             http_contents = self.parse_http(client_request)
             self.logger.info(f"Receiving HTTP Request: {http_contents}")
 
-            if http_contents.method != b"GET":  # as per Piazza response, handling GET should be enough
+            if http_contents.method == b"CONNECT":
+                # Usually it used by HTTPS even though it can be used by proxy-chaining and tunnelling (but not HTTPS)
                 self.logger.warning(
                     f"Sending 405 to {ip_address}@{port} for method {http_contents.method.decode('utf-8')}"
                 )
@@ -118,13 +117,62 @@ class Server:
             client_connection_socket.close()
             return
 
+    def read_client_request(self, client_connection_socket):
+        buffer_size = 4096
+        client_request = b''
+        while b'\r\n\r\n' not in client_request:
+            try:
+                temp = client_connection_socket.recv(buffer_size)
+                if not temp:
+                    break
+                else:
+                    client_request += temp
+            except TimeoutError:
+                self.logger.warning("Unable to receive full HTTP request")
+                break
+
+        http_version = b'HTTP/1.1' if b'HTTP/1.1' in client_request else (
+            b'HTTP/1.0' if b'HTTP/1.0' in client_request else b'unknown'
+        )
+
+        if http_version == b'unknown':
+            self.logger.error(f"Unsupported HTTP Version for {client_request}")
+            raise ValueError("Unsupported HTTP Version")
+        elif http_version == b'HTTP/1.0':
+            while True:
+                temp = client_connection_socket.recv(buffer_size)
+                if not temp:
+                    break
+                else:
+                    client_request += temp
+        else:
+            content_length = 0
+            dirty_headers = client_request.split(b'\r\n')
+
+            for item in dirty_headers:
+                if item.startswith(b'Content-Length'):
+                    _, data = item.split(b':', 1)
+                    content_length = int(data)
+                    break
+
+            # Actually there is a possibility of chunked encoding, but it is being ignored here
+            _, data = client_request.split(b'\r\n\r\n')
+            length_data = len(data)
+            while length_data < content_length:
+                temp = client_connection_socket.recv(buffer_size)
+                client_request += temp
+                length_data += len(temp)
+
+        return client_request, http_version
+
     def is_an_image_request(self, parsed_http_request):
         accept_headers = parsed_http_request.headers.get(b'Accept')
         is_accepting_image = False
-        if b'image' in accept_headers or b'*/*' in accept_headers:
+        if accept_headers is not None and (b'image' in accept_headers or b'*/*' in accept_headers):
             is_accepting_image = True
 
-        image_extensions = [b'.jpg', b'.png', b'.ico', b'.jpeg', b'.gif', b'.tiff', b'.svg', b'.apng', b'.avif']  # common image extensions
+        image_extensions = [b'.jpg', b'.png', b'.ico', b'.jpeg', b'.gif', b'.tiff', b'.svg', b'.apng',
+                            b'.avif']  # common image extensions
         for ext in image_extensions:
             if ext in parsed_http_request.full_resource_path.lower() and is_accepting_image:
                 return True
@@ -149,12 +197,13 @@ class Server:
         return http_response, len(html)
 
     def relay_request_to_server(self, parsed_http_request, client_request):
+        timeout = 3
         if self.is_attack_webpage:
             http_response, length = self.attack_html_request(parsed_http_request)
             return 200, http_response, length
 
         proxy_connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        proxy_connection_socket.settimeout(2)
+        proxy_connection_socket.settimeout(timeout)
 
         is_sub_image_used = False
         if self.is_an_image_request(parsed_http_request) and self.is_sub_image:
@@ -192,7 +241,7 @@ class Server:
                         proxy_connection_socket.close()
 
                         proxy_connection_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        proxy_connection_socket.settimeout(2)
+                        proxy_connection_socket.settimeout(timeout)
                         proxy_connection_socket.connect((parsed_http_request.host, parsed_http_request.port))
                         proxy_connection_socket.sendall(client_request)
 
@@ -294,7 +343,7 @@ class Server:
             raise ValueError(f"Invalid Parsing: {e}")
 
     def check_telemetry(self, key, url):
-        timeout = 7.5  # purely based on heuristics
+        timeout = 5  # purely based on heuristics
         while time.time() < self.telemetry[key][0] + timeout:
             remainder_time = self.telemetry[key][0] + timeout - time.time()
             time.sleep(remainder_time)
@@ -330,7 +379,7 @@ if __name__ == '__main__':
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
     # To disable logging, uncomment the following line
-    logger.disabled = True
+    # logger.disabled = True
 
     # Create parser
     parser = argparse.ArgumentParser(description="Python proxy server for CS3103 assignments")

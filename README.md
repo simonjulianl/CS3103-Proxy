@@ -10,12 +10,16 @@ To run the proxy, use `python3 ./proxy.py <port> <image-flag> <attack-flag>`
 - Preferably, `python 3.10.6` is being used, but it has been tested with `python 3.8.10` in xcne server too.
 - To enable logging, just comment `line 333` of the code.
 
+Clarification: 
+1. This proxy only supports `Content-Length` based reading for the request, therefore if you use chunked encoding
+, the body of the request won't be read if there is no `Content-Length` in the header too
+
 These are the assumptions that I made during this assignment: 
 ### 1. Telemetry
 1. The telemetry is distinguished using the `(host, port)` key. Therefore, if there are two browser sessions opening the
 same tabs, the telemetry will be combined for both sessions. 
 2. To determine that all the `GET` request from one browser session is done, for each request coming from the same `(host, port)` source, the proxy will 
-wait for **_7.5s (purely based on heuristic)_** from the last request. If there isn't any new requests, the telemetry will be outputted. Therefore, if there are requests that are lagging so bad,
+wait for **_5s (purely based on heuristic)_** from the last request. If there isn't any new requests, the telemetry will be outputted. Therefore, if there are requests that are lagging so bad,
 it is possible that it will be outputted under different telemetry. 
 3. For Image Sub, I am counting the new image for the telemetry (i.e. `/change.jpg`) instead of the original image. Similarly, for the Attack mode, I am counting the artificial returned response 
 that I have made into the telemetry instead of the original resource sizes. 
