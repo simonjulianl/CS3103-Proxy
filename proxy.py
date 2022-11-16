@@ -379,7 +379,7 @@ if __name__ == '__main__':
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
     # To disable logging, uncomment the following line
-    # logger.disabled = True
+    logger.disabled = True
 
     # Create parser
     parser = argparse.ArgumentParser(description="Python proxy server for CS3103 assignments")
