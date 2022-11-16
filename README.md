@@ -16,8 +16,8 @@ Clarification:
 
 These are the assumptions that I made during this assignment: 
 ### 1. Telemetry
-1. The telemetry is distinguished using the `(host, port)` key. Therefore, if there are two browser sessions opening the
-same tabs, the telemetry will be combined for both sessions. 
+1. The telemetry is distinguished using the `(referer, user-agent)` key. Therefore, if there are two browser sessions opening the
+same tabs, the telemetry will be combined for both sessions. For the initial webpage that doesn't have `referer`, it will use the initial resource URL. 
 2. To determine that all the `GET` request from one browser session is done, for each request coming from the same `(host, port)` source, the proxy will 
 wait for **_5s (purely based on heuristic)_** from the last request. If there isn't any new requests, the telemetry will be outputted. Therefore, if there are requests that are lagging so bad,
 it is possible that it will be outputted under different telemetry. 
