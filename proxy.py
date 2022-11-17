@@ -60,7 +60,7 @@ class Server:
             proxy_logger.error(f"Unable to create/re-use the socket. Error: {e}")
 
         self.main_socket.bind(("localhost", port))
-        max_client_connection = 10
+        max_client_connection = 100
         self.main_socket.listen(max_client_connection)
         proxy_logger.info(f"Proxy server is listening for clients at port {port}")
 
@@ -84,7 +84,7 @@ class Server:
             http_contents = self.parse_http(client_request)
             self.logger.info(f"Receiving HTTP Request: {http_contents}")
 
-            if http_contents.method == b"CONNECT":
+            if http_contents.method != b"GET":
                 # Usually it used by HTTPS even though it can be used by proxy-chaining and tunnelling (but not HTTPS)
                 self.logger.warning(
                     f"Sending 405 to {ip_address}@{port} for method {http_contents.method.decode('utf-8')}"
@@ -138,30 +138,6 @@ class Server:
         if http_version == b'unknown':
             self.logger.error(f"Unsupported HTTP Version for {client_request}")
             raise ValueError("Unsupported HTTP Version")
-        elif http_version == b'HTTP/1.0':
-            while True:
-                temp = client_connection_socket.recv(buffer_size)
-                if not temp:
-                    break
-                else:
-                    client_request += temp
-        else:
-            content_length = 0
-            dirty_headers = client_request.split(b'\r\n')
-
-            for item in dirty_headers:
-                if item.startswith(b'Content-Length'):
-                    _, data = item.split(b':', 1)
-                    content_length = int(data)
-                    break
-
-            # Actually there is a possibility of chunked encoding, but it is being ignored here
-            _, data = client_request.split(b'\r\n\r\n')
-            length_data = len(data)
-            while length_data < content_length:
-                temp = client_connection_socket.recv(buffer_size)
-                client_request += temp
-                length_data += len(temp)
 
         return client_request, http_version
 
@@ -197,7 +173,7 @@ class Server:
         return http_response, len(html)
 
     def relay_request_to_server(self, parsed_http_request, client_request):
-        timeout = 1
+        timeout = 2
         if self.is_attack_webpage:
             http_response, length = self.attack_html_request(parsed_http_request)
             return 200, http_response, length
@@ -387,7 +363,7 @@ if __name__ == '__main__':
     ch.setFormatter(CustomFormatter())
     logger.addHandler(ch)
     # To disable logging, uncomment the following line
-    # logger.disabled = True
+    logger.disabled = True
 
     # Create parser
     parser = argparse.ArgumentParser(description="Python proxy server for CS3103 assignments")
