@@ -59,7 +59,7 @@ class Server:
         except Exception as e:
             proxy_logger.error(f"Unable to create/re-use the socket. Error: {e}")
 
-        self.main_socket.bind(("localhost", port))
+        self.main_socket.bind(("", port))
         max_client_connection = 100
         self.main_socket.listen(max_client_connection)
         proxy_logger.info(f"Proxy server is listening for clients at port {port}")
