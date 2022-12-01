@@ -127,7 +127,7 @@ class Server:
                     break
                 else:
                     client_request += temp
-            except TimeoutError:
+            except Exception:
                 self.logger.warning("Unable to receive full HTTP request")
                 break
 
@@ -245,7 +245,7 @@ class Server:
             while True:
                 try:
                     server_response = proxy_connection_socket.recv(4096)
-                except TimeoutError:
+                except Exception:
                     _, data = header.split(b'\r\n\r\n', 1)
                     self.logger.info(
                         f"Timeout with no content-length, receive {len(web_server_full_response)}B "
@@ -269,7 +269,7 @@ class Server:
             while len(web_server_full_response) < content_length:
                 try:
                     server_response = proxy_connection_socket.recv(4096)
-                except TimeoutError:
+                except Exception:
                     return 408, b'', 0
                 if not server_response:
                     break
